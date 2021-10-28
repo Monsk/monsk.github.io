@@ -12,7 +12,7 @@ let video;
 let poseNet;
 let poses = [];
 let ready = false;
-let blobLocation = {x: 0, y: 0};
+let blobLocation = {x: 0, y: 500};
 let blobXSpeed = 1;
 let blobYSpeed = 1;
 let canvasWidth = 800;
@@ -64,9 +64,10 @@ function draw() {
     
         // We can call both functions to draw all keypoints and the skeletons
         // drawKeypoints();
-        // drawSkeleton();
+        drawSkeleton();
         drawFloatingBlob()
         isBlobCaught();
+        isRightShinCollision();
     }    
 }
 
@@ -120,11 +121,76 @@ function getLeftWristPosition() {
     }
 }
 
-function drawFloatingBlob() {
-    previousBlobLocation = blobLocation;
+function getRightElbowPosition() {
+  if (poses.length > 0){
+      if (poses[0].pose.rightElbow.confidence > 0.5){
+          return poses[0].pose.rightElbow;
+      }
+  }
+}
 
-    blobLocation.x += blobXSpeed;
-    blobLocation.y += blobYSpeed;
+function getRightAnklePosition() {
+  if (poses.length > 0){
+      if (poses[0].pose.rightAnkle.confidence > 0.5){
+          return poses[0].pose.rightAnkle;
+      }
+  }
+}
+
+function getRightKneePosition() {
+  if (poses.length > 0){
+      if (poses[0].pose.rightKnee.confidence > 0.5){
+          return poses[0].pose.rightKnee;
+      }
+  }
+}
+
+function getBlobLocation() {
+  previousBlobLocation = blobLocation;
+
+  blobLocation.x += blobXSpeed;
+  // blobLocation.y += blobYSpeed;
+
+  return blobLocation
+}
+
+function isRightShinCollision() {
+  blobLocation = getBlobLocation();
+  rightAnklePosition = getRightElbowPosition();
+  rightKneePosition = getRightWristPosition();
+
+  if (rightAnklePosition === undefined ||
+      rightKneePosition === undefined){
+        return false;
+  }
+
+  crossproduct = (blobLocation.y - rightAnklePosition.y) * (rightKneePosition.x - rightAnklePosition.x) - 
+    (blobLocation.x - rightAnklePosition.x) * (rightKneePosition.y - rightAnklePosition.y);
+  if (abs(crossproduct) > 1000){
+    return false;
+  }
+
+  dotproduct = (blobLocation.x - rightAnklePosition.x) * (rightKneePosition.x - rightAnklePosition.x) + 
+    (blobLocation.y - rightAnklePosition.y) * (rightKneePosition.y - rightAnklePosition.y);
+  if (dotproduct < 0){
+    return false;
+  }
+
+  limbLengthSquared = (rightKneePosition.x - rightAnklePosition.x) ** 2 + (rightKneePosition.y - rightAnklePosition.y)**2;
+  if (dotproduct > limbLengthSquared){
+    return false;
+  }
+
+  console.log('Collision');
+  return true;
+}
+
+function drawFloatingBlob() {
+    // previousBlobLocation = blobLocation;
+
+    // blobLocation.x += blobXSpeed;
+    // blobLocation.y += blobYSpeed;
+    blobLocation = getBlobLocation()
 
     fill(255, 0, 0);
     noStroke();
@@ -143,8 +209,9 @@ function blobOutOfBounds() {
 }
 
 function resetBlob() {
-    blobLocation.x = canvasWidth * Math.random();
-    blobLocation.y = canvasHeight * Math.random();
+    // blobLocation.x = canvasWidth * Math.random();
+    // blobLocation.y = canvasHeight * Math.random();
+    blobLocation = {x: 0, y: 500};
     blobXSpeed = 5 * (Math.random() - 0.5);
     blobYSpeed = 5 * (Math.random() - 0.5);
     availableBlobs += 1;
