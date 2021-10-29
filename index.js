@@ -12,12 +12,12 @@ let video;
 let poseNet;
 let poses = [];
 let ready = false;
-let blobLocation = {x: 0, y: 500};
-let blobXSpeed = 1;
-let blobYSpeed = 1;
+let blobStartLocation = {x: 0, y: 525};
+let blobXSpeed = 0.5;
 let canvasWidth = 800;
 let canvasHeight = 600;
 let blobsCaught = 0;
+let blobsDodged = 0;
 let availableBlobs = 0;
 
 function setup() {
@@ -30,6 +30,7 @@ function setup() {
 
     video = createCapture(VIDEO);
     video.size(width, height);
+    blobLocation = Object.assign({}, blobStartLocation);
 
   // Create a new poseNet method with a single detection
   poseNet = ml5.poseNet(
@@ -48,7 +49,7 @@ function setup() {
   });
   // Hide the video element, and just show the canvas
   video.hide();
-  select("#blobScore").html(blobsCaught);
+  select("#blobScore").html(blobsDodged);
   select("#maxBlobs").html(availableBlobs);
 }
 
@@ -66,8 +67,9 @@ function draw() {
         // drawKeypoints();
         drawSkeleton();
         drawFloatingBlob()
-        isBlobCaught();
+        // isBlobCaught();
         isRightShinCollision();
+        isLeftShinCollision();
     }    
 }
 
@@ -145,19 +147,33 @@ function getRightKneePosition() {
   }
 }
 
+function getLeftAnklePosition() {
+  if (poses.length > 0){
+      if (poses[0].pose.leftAnkle.confidence > 0.5){
+          return poses[0].pose.leftAnkle;
+      }
+  }
+}
+
+function getLeftKneePosition() {
+  if (poses.length > 0){
+      if (poses[0].pose.leftKnee.confidence > 0.5){
+          return poses[0].pose.leftKnee;
+      }
+  }
+}
+
 function getBlobLocation() {
   previousBlobLocation = blobLocation;
-
   blobLocation.x += blobXSpeed;
-  // blobLocation.y += blobYSpeed;
 
   return blobLocation
 }
 
 function isRightShinCollision() {
   blobLocation = getBlobLocation();
-  rightAnklePosition = getRightElbowPosition();
-  rightKneePosition = getRightWristPosition();
+  rightAnklePosition = getRightAnklePosition();
+  rightKneePosition = getRightKneePosition();
 
   if (rightAnklePosition === undefined ||
       rightKneePosition === undefined){
@@ -181,8 +197,39 @@ function isRightShinCollision() {
     return false;
   }
 
-  console.log('Collision');
-  return true;
+  console.log('right collision');
+  collisionDetected();
+}
+
+function isLeftShinCollision() {
+  blobLocation = getBlobLocation();
+  leftAnklePosition = getLeftAnklePosition();
+  leftKneePosition = getLeftKneePosition();
+
+  if (leftAnklePosition === undefined ||
+      leftKneePosition === undefined){
+        return false;
+  }
+
+  crossproduct = (blobLocation.y - leftAnklePosition.y) * (leftKneePosition.x - leftAnklePosition.x) - 
+    (blobLocation.x - leftAnklePosition.x) * (leftKneePosition.y - leftAnklePosition.y);
+  if (abs(crossproduct) > 1000){
+    return false;
+  }
+
+  dotproduct = (blobLocation.x - leftAnklePosition.x) * (leftKneePosition.x - leftAnklePosition.x) + 
+    (blobLocation.y - leftAnklePosition.y) * (leftKneePosition.y - leftAnklePosition.y);
+  if (dotproduct < 0){
+    return false;
+  }
+
+  limbLengthSquared = (leftKneePosition.x - leftAnklePosition.x) ** 2 + (leftKneePosition.y - leftAnklePosition.y)**2;
+  if (dotproduct > limbLengthSquared){
+    return false;
+  }
+
+  console.log('left collision');
+  collisionDetected();
 }
 
 function drawFloatingBlob() {
@@ -199,11 +246,19 @@ function drawFloatingBlob() {
     blobOutOfBounds();
 }
 
+function collisionDetected() {
+  select("#alert").html("You got smacked by a blob!");
+  setTimeout(function(){ select("#alert").html(""); }, 1000);
+  resetBlob();
+}
+
 function blobOutOfBounds() {
     if (blobLocation.x > canvasWidth || 
         blobLocation.y > canvasHeight || 
         blobLocation.x < 0 || 
         blobLocation.y < 0){
+        blobsDodged += 1;
+        select("#blobScore").html(blobsDodged);
         resetBlob();
     }
 }
@@ -211,29 +266,33 @@ function blobOutOfBounds() {
 function resetBlob() {
     // blobLocation.x = canvasWidth * Math.random();
     // blobLocation.y = canvasHeight * Math.random();
-    blobLocation = {x: 0, y: 500};
-    blobXSpeed = 5 * (Math.random() - 0.5);
-    blobYSpeed = 5 * (Math.random() - 0.5);
+    console.log(blobStartLocation);
+    blobLocation = Object.assign({}, blobStartLocation);
+    blobXSpeed += 0.2; 
+    // blobXSpeed = 5 * (Math.random() - 0.5);
+    // blobYSpeed = 5 * (Math.random() - 0.5);
     availableBlobs += 1;
     select("#maxBlobs").html(availableBlobs);
 }
 
-function catchBlob() {
-    blobsCaught += 1;
-    select("#blobScore").html(blobsCaught);
-    select("#maxBlobs").html(availableBlobs);
-    select("#alert").html("You caught a blob!");
-    setTimeout(function(){ select("#alert").html(""); }, 1000);
-    resetBlob();
-}
+// function catchBlob() {
+//     blobsCaught += 1;
+//     select("#blobScore").html(blobsCaught);
+//     select("#maxBlobs").html(availableBlobs);
+//     select("#alert").html("You caught a blob!");
+//     setTimeout(function(){ select("#alert").html(""); }, 1000);
+//     resetBlob();
+// }
 
-function isBlobCaught() {
-    rightWristPosition = getRightWristPosition();
-    leftWristPosition = getLeftWristPosition();
-    if (rightWristPosition && leftWristPosition) {
-        if ((abs(rightWristPosition.x - blobLocation.x) < 40 && abs(rightWristPosition.y - blobLocation.y) < 40) ||
-            (abs(leftWristPosition.x - blobLocation.x) < 40 && abs(leftWristPosition.y - blobLocation.y) < 40) ) {
-            catchBlob();
-        }
-    }
-}
+
+
+// function isBlobCaught() {
+//     rightWristPosition = getRightWristPosition();
+//     leftWristPosition = getLeftWristPosition();
+//     if (rightWristPosition && leftWristPosition) {
+//         if ((abs(rightWristPosition.x - blobLocation.x) < 40 && abs(rightWristPosition.y - blobLocation.y) < 40) ||
+//             (abs(leftWristPosition.x - blobLocation.x) < 40 && abs(leftWristPosition.y - blobLocation.y) < 40) ) {
+//             catchBlob();
+//         }
+//     }
+// }
